@@ -23,9 +23,12 @@ python3 -m http.server 8000
 
 ## What's on the page
 
-- Hero with a live cursor-reactive particle mesh and a feathered portrait
+- Tab-based nav — Work, Photography, Capabilities, About, and Contact are switched
+  by the pill nav instead of scrolled past; the hero and metrics strip stay put above them
+- Hero with a live cursor-reactive particle mesh, a feathered portrait, and a
+  click-to-reveal pixel-dissolve proof card
 - Metrics strip with a glassmorphism panel and hover light-sweep
 - Work section with glass-icon tiles per project
+- Photography section with a drifting 3D wall of real event/portrait photos
 - Capabilities section with a WebGL pixel-dither shader background
 - About section with a mouse-parallax mosaic of real project pieces
-- Pill-style nav with scroll-spy active state
