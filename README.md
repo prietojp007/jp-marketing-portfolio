@@ -23,12 +23,20 @@ python3 -m http.server 8000
 
 ## What's on the page
 
-- Tab-based nav — Work, Photography, Capabilities, About, and Contact are switched
-  by the pill nav instead of scrolled past; the hero and metrics strip stay put above them
-- Hero with a live cursor-reactive particle mesh, a feathered portrait, and a
-  click-to-reveal pixel-dissolve proof card
-- Metrics strip with a glassmorphism panel and hover light-sweep
+- Tab-based nav — Work, About, Results, Photography, Capabilities, and Contact
+  are switched by the pill nav instead of scrolled past; the hero is scoped to
+  the Work tab rather than staying pinned above every tab
+- Hero with a live cursor-reactive particle mesh and a bordered-block layout
+  ending in a "product preview" panel of real Results-tab numbers
 - Work section with glass-icon tiles per project
-- Photography section with a drifting 3D wall of real event/portrait photos
+- Photography section with a depth-stacked, drag/scroll carousel of real event
+  and portrait photos
+- Results tab: an analytics dashboard (stat cards, delta chips, reach-by-
+  platform bars) pulled from LinkedIn Analytics and Meta Business Suite,
+  switchable per program plus an "All Programs" collective rollup
 - Capabilities section with a WebGL pixel-dither shader background
-- About section with a mouse-parallax mosaic of real project pieces
+- About tab: bio, credentials, and three hover-to-expand accordion galleries
+  (Campaigns & Projects, Involvement, Events) built from real campaign/event
+  graphics
+- Contact form (name/email/reason/message) that composes a pre-filled email —
+  this is a static file with no backend, so there's nothing to wire it to yet
