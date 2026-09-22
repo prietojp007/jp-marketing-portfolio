@@ -311,16 +311,6 @@
     min-height: 860px;
     padding-block: clamp(80px, 12vh, 130px) var(--s-16);
   }
-  /* interactive constellation mesh — the hero's living backdrop */
-  .hero-mesh {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    display: block;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
   /* Bordered-frame hero: full-bleed vertical rules down each side, a
      horizontal rule between each block, and a "product preview" mockup at
      the bottom. The preview shows real numbers pulled from the Results tab
@@ -1246,8 +1236,6 @@
 
   <!-- HERO -->
   <section class="hero tab-panel" data-tab="about">
-    <canvas class="hero-mesh" aria-hidden="true"></canvas>
-
     <div class="wrap hero-frame">
       <div class="hero-block hero-block--top">
         <div class="hero-grid hero-grid--centered">
@@ -2564,181 +2552,6 @@
     document.addEventListener('visibilitychange', function () {
       if (!document.hidden) revealAll();
     });
-  })();
-</script>
-
-<script>
-  /* Constellation mesh — vanilla port of ConstellationGrid, scoped to .hero
-     and retuned to the Linear palette (void canvas, faint --mist lines,
-     --teal accent on cursor proximity). Honours prefers-reduced-motion. */
-  (function () {
-    var hero = document.querySelector('.hero');
-    var canvas = hero && hero.querySelector('.hero-mesh');
-    if (!hero || !canvas) return;
-    var ctx = canvas.getContext('2d', { alpha: false });
-    if (!ctx) return;
-
-    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    var VOID = '#08090a';          /* --void  */
-    var LINE = '208, 214, 224';    /* --mist, held faint by alpha */
-    var ACCENT = '2, 184, 204';    /* --teal, informational accent */
-
-    var width = 0, height = 0, dpr = 1;
-    var mouse = { x: -9999, y: -9999, prevX: -9999, prevY: -9999, vx: 0, vy: 0, radius: 200 };
-    var nodes = [];
-    var rafId = 0;
-    var lastTime = performance.now();
-
-    function initNodes() {
-      nodes = [];
-      var spacing = 62;
-      var cols = Math.ceil(width / spacing) + 1;
-      var rows = Math.ceil(height / spacing) + 1;
-      for (var i = 0; i < cols; i++) {
-        for (var j = 0; j < rows; j++) {
-          var x = i * spacing, y = j * spacing;
-          nodes.push({
-            x: x, y: y, vx: 0, vy: 0, baseX: x, baseY: y,
-            radius: Math.random() * 1.1 + 1,
-            label: (i * 7).toString(16).toUpperCase() + ':' + (j * 11).toString(16).toUpperCase(),
-            pulse: Math.random() * Math.PI * 2
-          });
-        }
-      }
-    }
-
-    function resize() {
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
-      width = hero.clientWidth;
-      height = hero.clientHeight;
-      canvas.width = width * dpr;
-      canvas.height = height * dpr;
-      canvas.style.width = width + 'px';
-      canvas.style.height = height + 'px';
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      initNodes();
-      if (reduced) drawFrame(false);
-    }
-
-    function drawFrame(interactive) {
-      ctx.fillStyle = VOID;
-      ctx.fillRect(0, 0, width, height);
-
-      var MAXD = 78, MAXSQ = MAXD * MAXD;
-      for (var a = 0; a < nodes.length; a++) {
-        var na = nodes[a];
-        for (var b = a + 1; b < nodes.length; b++) {
-          var nb = nodes[b];
-          var ndx = na.x - nb.x, ndy = na.y - nb.y, distSq = ndx * ndx + ndy * ndy;
-          if (distSq < MAXSQ) {
-            var nDist = Math.sqrt(distSq);
-            var alpha = (1 - nDist / MAXD) * 0.10;
-            ctx.strokeStyle = 'rgba(' + LINE + ', ' + alpha + ')';
-            ctx.lineWidth = 0.7;
-            ctx.beginPath();
-            ctx.moveTo(na.x, na.y);
-            ctx.lineTo(nb.x, nb.y);
-            ctx.stroke();
-          }
-        }
-      }
-
-      for (var c = 0; c < nodes.length; c++) {
-        var nc = nodes[c];
-        var mdx = mouse.x - nc.x, mdy = mouse.y - nc.y;
-        var md = Math.sqrt(mdx * mdx + mdy * mdy);
-        var near = interactive && md < mouse.radius;
-        var baseAlpha = near ? 0.85 : 0.14 + Math.sin(nc.pulse) * 0.06;
-        ctx.fillStyle = near
-          ? 'rgba(' + ACCENT + ', ' + baseAlpha + ')'
-          : 'rgba(' + LINE + ', ' + baseAlpha + ')';
-        var r = near ? nc.radius * 2.1 : nc.radius + Math.sin(nc.pulse) * 0.3;
-        ctx.beginPath();
-        ctx.arc(nc.x, nc.y, Math.max(0.5, r), 0, Math.PI * 2);
-        ctx.fill();
-
-        if (interactive && md < 88) {
-          var ring = ((nc.pulse * 20) % 30) + 4;
-          var ringAlpha = (1 - ring / 34) * 0.35;
-          ctx.strokeStyle = 'rgba(' + ACCENT + ', ' + ringAlpha + ')';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.arc(nc.x, nc.y, ring, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.font = '8px "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-          ctx.fillStyle = 'rgba(' + ACCENT + ', 0.7)';
-          ctx.fillText(nc.label, nc.x + 10, nc.y - 10);
-        }
-      }
-    }
-
-    function render(now) {
-      var dt = Math.min((now - lastTime) / 1000, 0.05);
-      lastTime = now;
-
-      mouse.vx = (mouse.x - mouse.prevX) / (dt * 1000 || 1);
-      mouse.vy = (mouse.y - mouse.prevY) / (dt * 1000 || 1);
-      mouse.prevX = mouse.x;
-      mouse.prevY = mouse.y;
-      var speed = Math.sqrt(mouse.vx * mouse.vx + mouse.vy * mouse.vy);
-
-      var SPRING_K = 18, DAMPING = 0.82;
-      for (var i = 0; i < nodes.length; i++) {
-        var n = nodes[i];
-        n.pulse += dt * 3;
-        var dx = mouse.x - n.x, dy = mouse.y - n.y;
-        var dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < mouse.radius && dist > 0) {
-          var power = 1 - dist / mouse.radius;
-          var force = power * (1400 + speed * 140);
-          var ang = Math.atan2(dy, dx);
-          n.vx -= Math.cos(ang) * force * dt;
-          n.vy -= Math.sin(ang) * force * dt;
-        }
-        n.vx += (n.baseX - n.x) * SPRING_K * dt;
-        n.vy += (n.baseY - n.y) * SPRING_K * dt;
-        n.vx *= DAMPING;
-        n.vy *= DAMPING;
-        n.x += n.vx * dt * 60;
-        n.y += n.vy * dt * 60;
-      }
-
-      drawFrame(true);
-      rafId = requestAnimationFrame(render);
-    }
-
-    function start() {
-      if (rafId || reduced) return;
-      lastTime = performance.now();
-      rafId = requestAnimationFrame(render);
-    }
-    function stop() {
-      if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
-    }
-
-    function onMove(e) {
-      var rect = hero.getBoundingClientRect();
-      mouse.x = e.clientX - rect.left;
-      mouse.y = e.clientY - rect.top;
-    }
-    function onLeave() { mouse.x = -9999; mouse.y = -9999; }
-
-    resize();
-    window.addEventListener('resize', resize);
-    if ('ResizeObserver' in window) new ResizeObserver(resize).observe(hero);
-
-    if (!reduced) {
-      window.addEventListener('mousemove', onMove, { passive: true });
-      document.addEventListener('mouseleave', onLeave);
-      if ('IntersectionObserver' in window) {
-        new IntersectionObserver(function (entries) {
-          entries.forEach(function (en) { en.isIntersecting ? start() : stop(); });
-        }, { threshold: 0 }).observe(hero);
-      } else {
-        start();
-      }
-    }
   })();
 </script>
 
