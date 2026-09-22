@@ -702,7 +702,7 @@
   .cap-list li {
     font-size: 15px;
     letter-spacing: -0.011em;
-    color: var(--fog);
+    color: var(--paper);
   }
 
   /* ---------- Photography: DriftWall (React Bits), ported to vanilla JS —
@@ -1081,6 +1081,19 @@
   .contact-head { text-align: center; max-width: 60ch; margin: 0 auto var(--s-12); }
   .contact-head .eyebrow { display: block; }
   .contact-head .body { margin: var(--s-3) auto 0; }
+  .contact-head__link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: var(--s-4);
+    color: var(--lime);
+    font-size: 15px;
+    font-weight: 560;
+    text-decoration: none;
+    border-bottom: 1px solid rgba(228, 242, 34, 0.4);
+    transition: border-color .2s ease, color .2s ease;
+  }
+  .contact-head__link:hover { border-color: var(--lime); }
   .contact-card {
     max-width: 560px;
     margin: 0 auto;
@@ -1347,12 +1360,40 @@
     </div>
   </section>
 
+  <!-- CREDENTIALS -->
+  <section style="padding-top:0;" class="tab-panel" data-tab="work">
+    <div class="wrap">
+      <div class="section-head reveal">
+        <p class="eyebrow">Credentials</p>
+        <h2 class="h-sm">Certifications &amp; licenses</h2>
+      </div>
+      <div class="cred-list reveal">
+        <div class="cred">
+          <span class="cred-name">Digital Marketing Certificate</span>
+          <span class="cred-issuer">Stukent</span>
+        </div>
+        <div class="cred">
+          <span class="cred-name">Social Media Certificate</span>
+          <span class="cred-issuer">HubSpot</span>
+        </div>
+        <div class="cred">
+          <span class="cred-name">Property Insurance License</span>
+          <span class="cred-issuer">Erie Insurance</span>
+        </div>
+        <div class="cred">
+          <span class="cred-name">Casualty Insurance License</span>
+          <span class="cred-issuer">Erie Insurance</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- WORK -->
   <section id="work" class="tab-panel is-active" data-tab="work">
     <div class="wrap">
       <div class="section-head reveal">
         <p class="eyebrow">Selected work</p>
-        <h2 class="h-lg">Campaigns, content, and the systems behind them</h2>
+        <h2 class="h-lg">Projects, Campaigns &amp; Everything In Between</h2>
         <p class="body">Each project below covers strategy through execution — I plan it, build it, publish it, and report on it.</p>
       </div>
 
@@ -1403,9 +1444,10 @@
             <p class="eyebrow">Video production</p>
             <h3 class="card-title">Titans Day of Giving</h3>
             <p class="body-sm">
-              Produced the campaign video from an approved script — coordinating voice-over talent,
-              sourcing footage and stills from campus partners, and editing the final cut for the
-              university's annual giving push.
+              Interviewed and highlighted college scholarship recipients for UWO's Titans Day of
+              Giving campaign, producing a video following a script from University Advancement.
+              Also developed a brand kit for the campaign, now featured on UWO's official Titans
+              Day of Giving website.
             </p>
             <div class="tags">
               <span class="tag tag-iris">Premiere Pro</span>
@@ -1421,7 +1463,7 @@
           </div>
           <div class="card-body">
             <p class="eyebrow">Partnership campaign</p>
-            <h3 class="card-title">UWO × Plexus alumni spotlight</h3>
+            <h3 class="card-title">UWO x Plexus</h3>
             <p class="body-sm">
               A three-post social collaboration with Plexus: an intro post surfacing the UWO alumni
               working there, a spotlight featuring alumni employees, and a closing thank-you for
@@ -1441,7 +1483,7 @@
           </div>
           <div class="card-body">
             <p class="eyebrow">Account management</p>
-            <h3 class="card-title">Titan Connect account handoff</h3>
+            <h3 class="card-title">Titan Connect Account Handoff</h3>
             <p class="body-sm">
               Documented and transitioned a full client account to an incoming content specialist —
               content calendar process, brand standards, platform access, and a paired posting
@@ -1461,11 +1503,13 @@
           </div>
           <div class="card-body">
             <p class="eyebrow">Ongoing program</p>
-            <h3 class="card-title">UWO Sales Program</h3>
+            <h3 class="card-title">Multi-Program Social Media Management</h3>
             <p class="body-sm">
-              Day-to-day marketing management for the Sales Program — recruitment content,
-              event promotion, photography, and the reporting that shows program leadership
-              what's landing with students.
+              Manage social media presence (Facebook, Instagram, LinkedIn) for four University
+              of Wisconsin Oshkosh programs: the School of Business, MBA Program, Sales Program,
+              and School of Education and Human Services. Responsible for content creation,
+              posting, and tracking analytics/metrics across all platforms to grow engagement
+              and visibility for each program.
             </p>
             <div class="tags">
               <span class="tag tag-iris">Program marketing</span>
@@ -1489,6 +1533,27 @@
             <div class="tags">
               <span class="tag tag-lavender">Email</span>
               <span class="tag">Editorial calendar</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="card reveal">
+          <div class="card-media">
+            <span class="glass-icon glass-teal" aria-hidden="true"><span class="glass-icon__back"></span><span class="glass-icon__front"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></svg></span></span>
+          </div>
+          <div class="card-body">
+            <p class="eyebrow">Web &amp; SEO</p>
+            <h3 class="card-title">UWO Website Migration</h3>
+            <p class="body-sm">
+              Contributed to migrating content from UWO's legacy website to its new platform,
+              transferring and reformatting pages in WordPress/Divi Builder. Optimized content
+              for SEO throughout the transfer and ensured all pages met UWO's brand and style
+              guidelines.
+            </p>
+            <div class="tags">
+              <span class="tag tag-teal">WordPress / Divi Builder</span>
+              <span class="tag">SEO</span>
+              <span class="tag">Content migration</span>
             </div>
           </div>
         </article>
@@ -1527,16 +1592,6 @@
             <span class="ag-panel__text">Alumni Spotlight — Kathryn Kaufman</span>
           </span>
         </div>
-        <div class="ag-panel" tabindex="0" role="listitem" aria-label="Professor Spotlight">
-          <span class="ag-panel__frame">
-            <span class="ag-panel__media"><span class="ag-media-img campaign-i3"></span></span>
-            <span class="ag-panel__overlay" aria-hidden="true"></span>
-          </span>
-          <span class="ag-panel__label">
-            <span class="ag-panel__bar"></span>
-            <span class="ag-panel__text">Professor Spotlight</span>
-          </span>
-        </div>
         <div class="ag-panel" tabindex="0" role="listitem" aria-label="Alumni Spotlight — B/R Walk-Off">
           <span class="ag-panel__frame">
             <span class="ag-panel__media"><span class="ag-media-img campaign-i4"></span></span>
@@ -1545,6 +1600,16 @@
           <span class="ag-panel__label">
             <span class="ag-panel__bar"></span>
             <span class="ag-panel__text">Alumni Spotlight — B/R Walk-Off</span>
+          </span>
+        </div>
+        <div class="ag-panel" tabindex="0" role="listitem" aria-label="Professor Spotlight">
+          <span class="ag-panel__frame">
+            <span class="ag-panel__media"><span class="ag-media-img campaign-i3"></span></span>
+            <span class="ag-panel__overlay" aria-hidden="true"></span>
+          </span>
+          <span class="ag-panel__label">
+            <span class="ag-panel__bar"></span>
+            <span class="ag-panel__text">Professor Spotlight</span>
           </span>
         </div>
         <div class="ag-panel" tabindex="0" role="listitem" aria-label="Alumni Spotlight — UWO Alumni Network">
@@ -1556,34 +1621,6 @@
             <span class="ag-panel__bar"></span>
             <span class="ag-panel__text">Alumni Spotlight — UWO Alumni Network</span>
           </span>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- CREDENTIALS -->
-  <section style="padding-top:0;" class="tab-panel" data-tab="work">
-    <div class="wrap">
-      <div class="section-head reveal">
-        <p class="eyebrow">Credentials</p>
-        <h2 class="h-sm">Certifications &amp; licenses</h2>
-      </div>
-      <div class="cred-list reveal">
-        <div class="cred">
-          <span class="cred-name">Digital Marketing Certificate</span>
-          <span class="cred-issuer">Stukent</span>
-        </div>
-        <div class="cred">
-          <span class="cred-name">Social Media Certificate</span>
-          <span class="cred-issuer">HubSpot</span>
-        </div>
-        <div class="cred">
-          <span class="cred-name">Property Insurance License</span>
-          <span class="cred-issuer">Erie Insurance</span>
-        </div>
-        <div class="cred">
-          <span class="cred-name">Casualty Insurance License</span>
-          <span class="cred-issuer">Erie Insurance</span>
         </div>
       </div>
     </div>
@@ -2449,7 +2486,8 @@
       <div class="contact-head reveal">
         <p class="eyebrow">Contact</p>
         <h2 class="h-lg">Contact me</h2>
-        <p class="body">Open to internships, freelance projects, and campus collaborations — especially anything that touches social, email, or web.</p>
+        <p class="body">Open to full-time marketing roles and freelance projects — Digital Marketing, Web Development, Social Media, Photography and much more. If you need someone who can hit the ground running, get in touch down below.</p>
+        <a class="contact-head__link" href="https://www.linkedin.com/in/-juanprieto/" target="_blank" rel="noopener">linkedin.com/in/-juanprieto</a>
       </div>
 
       <div class="contact-card reveal">
