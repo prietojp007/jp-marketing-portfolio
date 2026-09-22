@@ -365,6 +365,23 @@
     letter-spacing: -0.035em;
     line-height: 0.96;
   }
+  /* ParticleText (React Bits, ported) — the headline glyphs are sampled onto
+     a canvas and drawn as particles that gather on load and react to the
+     cursor. The real text stays in the DOM at opacity:0 so layout, wrapping,
+     and screen readers all work exactly as before. */
+  .hero-particle {
+    position: relative;
+  }
+  .hero-particle__text {
+    opacity: 0;
+  }
+  .hero-particle__canvas {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
   .status {
     display: inline-flex;
     align-items: center;
@@ -1240,7 +1257,10 @@
       <div class="hero-block hero-block--top">
         <div class="hero-grid hero-grid--centered">
           <span class="status reveal"><span class="dot" aria-hidden="true"></span> Marketing Student - UW Oshkosh</span>
-          <h1 class="display hero-display reveal">Marketing that gets<br>measured, not just made.</h1>
+          <h1 class="display hero-display reveal hero-particle" aria-label="Marketing that gets measured, not just made.">
+            <span class="hero-particle__text" aria-hidden="true">Marketing that gets<br>measured, not just made.</span>
+            <canvas class="hero-particle__canvas" aria-hidden="true"></canvas>
+          </h1>
           <p class="body-lg hero-lede reveal">
             Social, email, web content, and creative production for four academic programs at
             UW Oshkosh — from strategy and photography to SEO/AEO for AI search visibility and
@@ -2555,6 +2575,221 @@
   })();
 </script>
 
+<script>
+  /* ParticleText (React Bits) — vanilla port, scoped to .hero-particle
+     elements. The visible headline is a canvas of particles sampled from
+     the real (opacity:0) text underneath, so layout/wrapping/a11y all
+     still come from ordinary text. Particles scatter, then gather on
+     load, drift gently at rest, and get pushed by the cursor. */
+  (function () {
+    var hosts = Array.prototype.slice.call(document.querySelectorAll('.hero-particle'));
+    if (!hosts.length) return;
+
+    var COLOR = { r: 255, g: 255, b: 255 };      /* --paper */
+    var HIGHLIGHT = { r: 228, g: 242, b: 34 };    /* --lime */
+    var PARTICLE_SIZE = 1.8;
+    var DENSITY = 3;
+    var SCATTER = 150;
+    var GATHER_MS = 1400;
+    var STAGGER_MS = 360;
+    var POINTER_REPEL = 34;
+    var REPEL_RADIUS = 100;
+    var IDLE_DRIFT = 0.55;
+
+    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+    function mixRgb(a, b, t) {
+      return 'rgb(' + Math.round(a.r + (b.r - a.r) * t) + ', ' +
+        Math.round(a.g + (b.g - a.g) * t) + ', ' + Math.round(a.b + (b.b - a.b) * t) + ')';
+    }
+
+    hosts.forEach(function (host) {
+      var textEl = host.querySelector('.hero-particle__text');
+      var canvas = host.querySelector('.hero-particle__canvas');
+      if (!textEl || !canvas) return;
+      var ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      var lines = textEl.innerHTML.split(/<br\s*\/?>/i).map(function (s) {
+        var d = document.createElement('div');
+        d.innerHTML = s;
+        return d.textContent;
+      });
+
+      var width = 0, height = 0, dpr = 1;
+      var particles = [];
+      var gathering = false, gatherStart = 0;
+      var rafId = 0;
+      var pointer = { active: false, x: -9999, y: -9999, smoothX: -9999, smoothY: -9999 };
+
+      function startGather() {
+        var now = performance.now();
+        particles.forEach(function (p) {
+          if (!reduced) {
+            var angle = p.seed * Math.PI * 2;
+            var dist = SCATTER * (0.35 + p.depth * 0.75);
+            p.x = p.targetX + Math.cos(angle) * dist;
+            p.y = p.targetY + Math.sin(angle) * dist;
+          }
+          p.startX = p.x;
+          p.startY = p.y;
+          p.delay = reduced ? 0 : p.seed * STAGGER_MS;
+        });
+        gatherStart = now;
+        gathering = true;
+      }
+
+      function sample() {
+        var rect = host.getBoundingClientRect();
+        width = Math.max(1, Math.floor(rect.width));
+        height = Math.max(1, Math.floor(rect.height));
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        var computed = window.getComputedStyle(textEl);
+        var fontSize = parseFloat(computed.fontSize) || 48;
+        var lineHeight = parseFloat(computed.lineHeight) || fontSize * 1.1;
+        var font = computed.fontWeight + ' ' + fontSize + 'px ' + computed.fontFamily;
+
+        var off = document.createElement('canvas');
+        off.width = width;
+        off.height = height;
+        var offCtx = off.getContext('2d', { willReadFrequently: true });
+        offCtx.font = font;
+        offCtx.textAlign = 'center';
+        offCtx.textBaseline = 'middle';
+        try { offCtx.letterSpacing = computed.letterSpacing; } catch (e) {}
+        offCtx.fillStyle = '#fff';
+        var blockTop = (height - lineHeight * lines.length) / 2;
+        lines.forEach(function (line, i) {
+          offCtx.fillText(line, width / 2, blockTop + lineHeight * (i + 0.5));
+        });
+
+        var img = offCtx.getImageData(0, 0, width, height).data;
+        var targets = [];
+        var step = Math.max(2, DENSITY);
+        for (var y = 0; y < height; y += step) {
+          for (var x = 0; x < width; x += step) {
+            if (img[(y * width + x) * 4 + 3] > 40) targets.push({ x: x, y: y });
+          }
+        }
+
+        var maxParticles = Math.max(600, Math.min(4200, Math.floor((width * height) / 110)));
+        var stride = Math.max(1, Math.ceil(targets.length / maxParticles));
+        particles = targets.filter(function (_, i) { return i % stride === 0; }).map(function (t, i) {
+          var seed = ((i * 9301 + 49297) % 233280) / 233280;
+          var depth = 0.45 + (((i * 233 + 97) % 1000) / 1000) * 0.9;
+          return {
+            x: t.x, y: t.y, startX: t.x, startY: t.y, targetX: t.x, targetY: t.y,
+            size: Math.max(0.6, PARTICLE_SIZE * (0.75 + depth * 0.35)),
+            color: mixRgb(COLOR, HIGHLIGHT, clamp(t.x / width + (seed - 0.5) * 0.35, 0, 1)),
+            seed: seed, depth: depth, delay: seed * STAGGER_MS
+          };
+        });
+
+        if (reduced) {
+          gathering = false;
+          render(performance.now());
+        } else {
+          startGather();
+        }
+      }
+
+      function render(now) {
+        ctx.clearRect(0, 0, width, height);
+        if (!reduced) {
+          ctx.shadowBlur = PARTICLE_SIZE * 2.5;
+          ctx.shadowColor = 'rgb(' + HIGHLIGHT.r + ', ' + HIGHLIGHT.g + ', ' + HIGHLIGHT.b + ')';
+        }
+
+        pointer.smoothX += (pointer.x - pointer.smoothX) * 0.18;
+        pointer.smoothY += (pointer.y - pointer.smoothY) * 0.18;
+
+        var complete = true;
+        particles.forEach(function (p) {
+          var baseX = p.targetX, baseY = p.targetY, progress = 1;
+          if (gathering) {
+            var local = (now - gatherStart - p.delay) / (reduced ? 1 : GATHER_MS);
+            progress = clamp(local, 0, 1);
+            var eased = easeOutCubic(progress);
+            baseX = p.startX + (p.targetX - p.startX) * eased;
+            baseY = p.startY + (p.targetY - p.startY) * eased;
+            if (progress < 1) complete = false;
+          } else if (!reduced) {
+            var t = now * 0.001;
+            baseX += Math.sin(t * 0.9 + p.seed * 10) * IDLE_DRIFT * p.depth;
+            baseY += Math.cos(t * 0.75 + p.depth * 10) * IDLE_DRIFT * p.depth;
+          }
+
+          if (pointer.active && !reduced) {
+            var dx = baseX - pointer.smoothX, dy = baseY - pointer.smoothY;
+            var dist = Math.hypot(dx, dy);
+            if (dist > 0 && dist < REPEL_RADIUS) {
+              var force = Math.pow(1 - dist / REPEL_RADIUS, 2) * POINTER_REPEL;
+              baseX += (dx / dist) * force;
+              baseY += (dy / dist) * force;
+            }
+          }
+
+          var follow = reduced ? 1 : 0.22;
+          p.x += (baseX - p.x) * follow;
+          p.y += (baseY - p.y) * follow;
+
+          ctx.globalAlpha = clamp(0.35 + progress * 0.65, 0, 1);
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size / 2, 0, Math.PI * 2);
+          ctx.fill();
+        });
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+
+        if (gathering && complete) gathering = false;
+      }
+
+      function start() {
+        if (rafId) return;
+        function loop(now) { render(now); rafId = requestAnimationFrame(loop); }
+        rafId = requestAnimationFrame(loop);
+      }
+      function stop() {
+        if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+      }
+
+      function onMove(e) {
+        var rect = canvas.getBoundingClientRect();
+        pointer.x = e.clientX - rect.left;
+        pointer.y = e.clientY - rect.top;
+        pointer.active = true;
+      }
+      function onLeave() { pointer.active = false; }
+
+      sample();
+      window.addEventListener('resize', sample);
+      if ('ResizeObserver' in window) new ResizeObserver(sample).observe(host);
+
+      if (!reduced) {
+        canvas.addEventListener('pointermove', onMove, { passive: true });
+        canvas.addEventListener('pointerleave', onLeave);
+        if ('IntersectionObserver' in window) {
+          new IntersectionObserver(function (entries) {
+            entries.forEach(function (en) { en.isIntersecting ? start() : stop(); });
+          }, { threshold: 0 }).observe(host);
+        } else {
+          start();
+        }
+      } else {
+        render(performance.now());
+      }
+    });
+  })();
+</script>
 
 <script>
   /* GridMotion (React Bits) — vanilla port: rows drift on mouse X with
