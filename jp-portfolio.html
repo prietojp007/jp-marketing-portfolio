@@ -86,23 +86,6 @@
     font-feature-settings: "cv01", "cv09", "ss03";
   }
 
-  /* Page-wide ambient backdrop — GradientWaves (React Bits), ported to a raw
-     WebGL2 shader (ogl swapped out, same as PixelBlast below, so the page
-     loads zero JS dependencies). A fixed, viewport-covering canvas behind
-     every tab: z-index: -1 sits below normal-flow content (nav/main/footer
-     never need their own z-index for this), so it never blocks clicks or
-     covers text. JS handles sizing, color, and the reduced-motion/hidden-tab
-     pause; this rule is just the fixed full-bleed placement. */
-  .page-glow {
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    display: block;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-  }
-
   ::selection { background: var(--accent); color: var(--void); }
 
   a { color: inherit; text-decoration: none; }
@@ -363,7 +346,22 @@
     padding: var(--s-16) var(--s-6);
     border-bottom: 1px solid var(--graphite);
   }
-  .hero-block--top { padding-bottom: var(--s-12); }
+  .hero-block--top { position: relative; overflow: hidden; padding-bottom: var(--s-12); }
+  /* CursorGrid (React Bits) — already framework-agnostic Canvas 2D, no
+     dependency to strip. A lattice of cells lights up under the cursor
+     within the hero, in the brand neon green; a click sends out an
+     expanding ring. Skipped entirely under prefers-reduced-motion, since
+     the whole point is pointer-driven motion. */
+  .cursor-grid {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+  }
+  .cursor-grid__canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
   .hero-block--cta {
     display: flex;
     flex-direction: column;
@@ -558,6 +556,8 @@
     gap: var(--s-8);
   }
   .hero-grid--centered {
+    position: relative;
+    z-index: 1;
     align-items: center;
     text-align: center;
     max-width: 760px;
@@ -1464,8 +1464,6 @@
   }
 </style>
 
-<canvas class="page-glow" id="page-gradient-waves" aria-hidden="true"></canvas>
-
 <nav class="nav">
   <div class="wrap nav-inner">
     <a class="wordmark" href="#top">
@@ -1519,6 +1517,9 @@
   <section class="hero tab-panel" data-tab="about">
     <div class="wrap hero-frame">
       <div class="hero-block hero-block--top">
+        <div class="cursor-grid" id="hero-cursor-grid" aria-hidden="true">
+          <canvas class="cursor-grid__canvas"></canvas>
+        </div>
         <div class="hero-grid hero-grid--centered">
           <span class="status reveal"><span class="dot" aria-hidden="true"></span> Marketing Student - UW Oshkosh</span>
           <h1 class="display hero-display reveal">AI-Driven Marketing Specialist</h1>
@@ -3168,6 +3169,198 @@
 </script>
 
 <script>
+  /* CursorGrid (React Bits) — already dependency-free Canvas 2D, ported
+     as-is minus the React wrapper. A lattice of cells over the hero lights
+     up under the cursor in the brand neon green and fades out after
+     holdTime + fadeDuration; a click sends an expanding ring through the
+     grid. Skipped under prefers-reduced-motion — the effect is entirely
+     pointer-driven, so there's nothing meaningful to show statically. */
+  (function () {
+    var container = document.getElementById('hero-cursor-grid');
+    var canvas = container && container.querySelector('canvas.cursor-grid__canvas');
+    if (!container || !canvas) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+
+    var ctx = canvas.getContext('2d');
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+    var CELL = 70, COLOR = '#ccff00', RADIUS = 140, HOLD = 400, FADE = 800,
+        LINE_W = 1.2, MAX_A = 0.85, FILL_A = 0, GRID_A = 0.05, CELL_R = 0,
+        PULSE_SPEED = 600;
+    var FALLOFF = function (t) { return t * t * (3 - 2 * t); };
+
+    var cr = 0xcc, cg = 0xff, cb = 0x00;
+    var cols = 0, rows = 0, offX = 0, offY = 0;
+    var alphas = new Float32Array(0), touched = new Float64Array(0);
+    var w = 0, h = 0;
+    var pulses = [];
+    var raf = 0, running = false, lastFrame = 0;
+
+    function rebuild() {
+      w = container.offsetWidth;
+      h = container.offsetHeight;
+      canvas.width = Math.max(1, Math.round(w * dpr));
+      canvas.height = Math.max(1, Math.round(h * dpr));
+      canvas.style.width = w + 'px';
+      canvas.style.height = h + 'px';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      cols = Math.ceil(w / CELL) + 1;
+      rows = Math.ceil(h / CELL) + 1;
+      offX = (w - cols * CELL) / 2;
+      offY = (h - rows * CELL) / 2;
+      alphas = new Float32Array(cols * rows);
+      touched = new Float64Array(cols * rows);
+    }
+
+    function cellCenter(i) {
+      var cx = offX + (i % cols) * CELL + CELL / 2;
+      var cy = offY + Math.floor(i / cols) * CELL + CELL / 2;
+      return [cx, cy];
+    }
+
+    function energize(x, y) {
+      var r = Math.max(RADIUS, 1);
+      var now = performance.now();
+      var minCol = Math.max(0, Math.floor((x - r - offX) / CELL));
+      var maxCol = Math.min(cols - 1, Math.floor((x + r - offX) / CELL));
+      var minRow = Math.max(0, Math.floor((y - r - offY) / CELL));
+      var maxRow = Math.min(rows - 1, Math.floor((y + r - offY) / CELL));
+      for (var row = minRow; row <= maxRow; row++) {
+        for (var col = minCol; col <= maxCol; col++) {
+          var i = row * cols + col;
+          var c = cellCenter(i);
+          var dist = Math.hypot(c[0] - x, c[1] - y);
+          if (dist > r) continue;
+          var level = FALLOFF(1 - dist / r) * MAX_A;
+          if (level > alphas[i]) { alphas[i] = level; touched[i] = now; }
+          else if (level > 0) { touched[i] = now; }
+        }
+      }
+    }
+
+    function draw(now) {
+      var dt = Math.min(now - lastFrame, 50);
+      lastFrame = now;
+      ctx.clearRect(0, 0, w, h);
+
+      if (GRID_A > 0) {
+        ctx.strokeStyle = 'rgba(' + cr + ',' + cg + ',' + cb + ',' + GRID_A + ')';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (var col = 0; col <= cols; col++) {
+          var x = Math.round(offX + col * CELL) + 0.5;
+          ctx.moveTo(x, 0); ctx.lineTo(x, h);
+        }
+        for (var row = 0; row <= rows; row++) {
+          var y = Math.round(offY + row * CELL) + 0.5;
+          ctx.moveTo(0, y); ctx.lineTo(w, y);
+        }
+        ctx.stroke();
+      }
+
+      for (var pi = pulses.length - 1; pi >= 0; pi--) {
+        var pulse = pulses[pi];
+        var age = (now - pulse.t0) / 1000;
+        var ringR = age * PULSE_SPEED;
+        if (ringR > Math.hypot(w, h)) { pulses.splice(pi, 1); continue; }
+        var band = CELL;
+        var minCol = Math.max(0, Math.floor((pulse.x - ringR - band - offX) / CELL));
+        var maxCol = Math.min(cols - 1, Math.floor((pulse.x + ringR + band - offX) / CELL));
+        var minRow = Math.max(0, Math.floor((pulse.y - ringR - band - offY) / CELL));
+        var maxRow = Math.min(rows - 1, Math.floor((pulse.y + ringR + band - offY) / CELL));
+        for (var row2 = minRow; row2 <= maxRow; row2++) {
+          for (var col2 = minCol; col2 <= maxCol; col2++) {
+            var i2 = row2 * cols + col2;
+            var c2 = cellCenter(i2);
+            var dist2 = Math.hypot(c2[0] - pulse.x, c2[1] - pulse.y);
+            if (Math.abs(dist2 - ringR) < band / 2 && MAX_A > alphas[i2]) {
+              alphas[i2] = MAX_A; touched[i2] = now;
+            }
+          }
+        }
+      }
+
+      var anyVisible = pulses.length > 0;
+      var fadeStep = dt / Math.max(FADE, 16);
+      var half = CELL / 2;
+
+      for (var i = 0; i < alphas.length; i++) {
+        var a = alphas[i];
+        if (a <= 0) continue;
+        if (now - touched[i] > HOLD) {
+          a = Math.max(0, a - fadeStep);
+          alphas[i] = a;
+          if (a <= 0) continue;
+        }
+        anyVisible = true;
+
+        var cc = cellCenter(i);
+        var cx = cc[0], cy = cc[1];
+        var gradient = ctx.createRadialGradient(cx, cy, half * 0.1, cx, cy, CELL);
+        gradient.addColorStop(0, 'rgba(' + cr + ',' + cg + ',' + cb + ',' + a + ')');
+        gradient.addColorStop(1, 'rgba(' + cr + ',' + cg + ',' + cb + ',0)');
+
+        var rx = cx - half + 0.5;
+        var ry = cy - half + 0.5;
+        var s = CELL - 1;
+
+        ctx.beginPath();
+        if (CELL_R > 0) ctx.roundRect(rx, ry, s, s, CELL_R);
+        else ctx.rect(rx, ry, s, s);
+        if (FILL_A > 0) {
+          ctx.fillStyle = 'rgba(' + cr + ',' + cg + ',' + cb + ',' + (a * FILL_A) + ')';
+          ctx.fill();
+        }
+        ctx.strokeStyle = gradient;
+        ctx.lineWidth = LINE_W;
+        ctx.stroke();
+      }
+
+      if (anyVisible) {
+        raf = requestAnimationFrame(draw);
+      } else {
+        running = false;
+        if (GRID_A <= 0) ctx.clearRect(0, 0, w, h);
+      }
+    }
+
+    function wake() {
+      if (running) return;
+      running = true;
+      lastFrame = performance.now();
+      raf = requestAnimationFrame(draw);
+    }
+
+    function toLocal(e) {
+      var rect = canvas.getBoundingClientRect();
+      return [e.clientX - rect.left, e.clientY - rect.top];
+    }
+
+    container.addEventListener('pointermove', function (e) {
+      var p = toLocal(e);
+      energize(p[0], p[1]);
+      wake();
+    });
+    container.addEventListener('pointerdown', function (e) {
+      var p = toLocal(e);
+      pulses.push({ x: p[0], y: p[1], t0: performance.now() });
+      wake();
+    });
+
+    var resizeTimer = 0;
+    function scheduleRebuild() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () { rebuild(); wake(); }, 150);
+    }
+    window.addEventListener('resize', scheduleRebuild);
+    if ('ResizeObserver' in window) new ResizeObserver(scheduleRebuild).observe(container);
+
+    rebuild();
+    if (GRID_A > 0) wake();
+  })();
+</script>
+
+<script>
   /* Contact form: this is a static file with no backend to post to, so
      "Send message" builds a mailto: link from the filled-in fields and hands
      it to the browser — same mechanism as the old plain "Email me" button,
@@ -3542,241 +3735,6 @@ void main(){
         es.forEach(function (en) { en.isIntersecting ? go() : halt(); });
       }, { threshold: 0 }).observe(host);
     } else { go(); }
-  })();
-</script>
-
-<script>
-  /* Page-wide backdrop: GradientWaves (React Bits) — raw WebGL2 raymarched
-     wave shader, ogl swapped out for the same fullscreen-triangle pattern
-     PixelBlast uses above, so the page still loads zero JS dependencies.
-     Colours are the site's void/obsidian black fading into the brand neon
-     green. Runs behind every tab (see the fixed .page-glow rule); pauses on
-     prefers-reduced-motion (one static frame) and when the tab is hidden. */
-  (function () {
-    var canvas = document.getElementById('page-gradient-waves');
-    if (!canvas) return;
-    var gl = canvas.getContext('webgl2', { alpha: true, premultipliedAlpha: true, antialias: false });
-    if (!gl) return;
-
-    var reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-    var VERT = '#version 300 es\nin vec2 position;\nvoid main(){ gl_Position = vec4(position, 0.0, 1.0); }';
-    var FRAG = '#version 300 es\nprecision highp float;\n' + `
-uniform vec2 iResolution;
-uniform float iTime;
-uniform float uSpeed;
-uniform float uAmplitude;
-uniform float uWaveScale;
-uniform float uWaveRatio;
-uniform float uSwell;
-uniform float uTurbulence;
-uniform float uTilt;
-uniform float uZoom;
-uniform float uHeight;
-uniform float uFogDepth;
-uniform float uSteps;
-uniform float uBrightness;
-uniform float uOpacity;
-uniform float uGrain;
-uniform float uGrainIntensity;
-uniform vec2 uMouse;
-uniform float uParallax;
-uniform bool uEnableMouse;
-uniform vec3 uHorizonColor;
-uniform vec3 uWaveColor;
-uniform vec3 uCrestColor;
-out vec4 fragColor;
-
-const float MAX_DIST = 20000.0;
-
-float hash21(vec2 p) {
-  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-  p3 += dot(p3, p3.yzx + 33.33);
-  return fract((p3.x + p3.y) * p3.z);
-}
-
-float plasma(vec3 r, vec2 freq, vec4 tc) {
-  float mx = r.x + tc.x;
-  mx += uSwell * sin((r.y + mx) / 20.0 + tc.y);
-  float my = r.y - tc.z;
-  my += uTurbulence * cos(r.x / 23.0 + tc.w);
-  return r.z - (sin(mx * freq.x) * uAmplitude + sin(my * freq.y) * uAmplitude + uHeight);
-}
-
-float raymarch(vec3 pos, vec3 dir, vec2 freq, vec4 tc) {
-  float dist = 0.0;
-  for (int i = 0; i < 128; i++) {
-    if (float(i) >= uSteps) break;
-    float dscene = plasma(pos + dist * dir, freq, tc);
-    if (abs(dscene) < 0.1) break;
-    dist += 0.9 * dscene;
-    if (!(abs(dist) < MAX_DIST)) return MAX_DIST;
-  }
-  return dist;
-}
-
-void main() {
-  float T = iTime * uSpeed;
-  vec2 freq = vec2(uWaveScale / 7.0, (uWaveScale * uWaveRatio) / 3.0);
-  vec4 tc = vec4(T / 0.130, T / 0.810, T / 0.200, T / 0.710);
-  float c, s;
-  float vfov = (3.14159 / 2.3) / max(uZoom, 0.05);
-  vec3 cam = vec3(0.0, 0.0, 30.0);
-  vec2 uv = (gl_FragCoord.xy / iResolution.xy) - 0.5;
-  uv.x *= iResolution.x / iResolution.y;
-  uv.y *= -1.0;
-
-  vec3 dir = vec3(0.0, 0.0, -1.0);
-  float ulen = length(uv);
-  float xrot = vfov * ulen;
-  c = cos(xrot); s = sin(xrot);
-  dir = mat3(1.0, 0.0, 0.0, 0.0, c, -s, 0.0, s, c) * dir;
-  vec2 nuv = ulen > 1e-5 ? uv / ulen : vec2(1.0, 0.0);
-  c = nuv.x; s = nuv.y;
-  dir = mat3(c, -s, 0.0, s, c, 0.0, 0.0, 0.0, 1.0) * dir;
-  c = cos(uTilt); s = sin(uTilt);
-  dir = mat3(c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c) * dir;
-
-  if (uEnableMouse) {
-    float yaw = (uMouse.x - 0.5) * uParallax * 0.4;
-    float pitch = (uMouse.y - 0.5) * uParallax * 0.4;
-    c = cos(yaw); s = sin(yaw);
-    dir = mat3(c, 0.0, s, 0.0, 1.0, 0.0, -s, 0.0, c) * dir;
-    c = cos(pitch); s = sin(pitch);
-    dir = mat3(1.0, 0.0, 0.0, 0.0, c, -s, 0.0, s, c) * dir;
-  }
-
-  float dist = raymarch(cam, dir, freq, tc);
-  vec3 pos = cam + dist * dir;
-
-  float t = clamp(uFogDepth / max(dist, 0.001), 0.0, 1.0);
-  vec3 body = mix(uWaveColor, uCrestColor, clamp(pos.z * 0.08 + 0.5, 0.0, 1.0));
-  vec3 col = mix(uHorizonColor, body, t);
-  col *= uBrightness;
-  col = clamp(col, 0.0, 1.0);
-
-  float alpha = clamp(t, 0.0, 1.0) * uOpacity;
-  if (uGrain > 0.5) {
-    float g = hash21(gl_FragCoord.xy + mod(iTime, 64.0) * 11.0);
-    alpha += (g - 0.5) * uGrainIntensity;
-  }
-  alpha = clamp(alpha, 0.0, 1.0);
-  fragColor = vec4(col * alpha, alpha);
-}
-`;
-
-    function compile(type, src) {
-      var s = gl.createShader(type);
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) { console.warn('GradientWaves shader:', gl.getShaderInfoLog(s)); return null; }
-      return s;
-    }
-    var vs = compile(gl.VERTEX_SHADER, VERT);
-    var fs = compile(gl.FRAGMENT_SHADER, FRAG);
-    if (!vs || !fs) return;
-    var prog = gl.createProgram();
-    gl.attachShader(prog, vs); gl.attachShader(prog, fs); gl.linkProgram(prog);
-    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) { console.warn('GradientWaves link:', gl.getProgramInfoLog(prog)); return; }
-    gl.useProgram(prog);
-
-    var buf = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
-    var pl = gl.getAttribLocation(prog, 'position');
-    gl.enableVertexAttribArray(pl);
-    gl.vertexAttribPointer(pl, 2, gl.FLOAT, false, 0, 0);
-
-    gl.enable(gl.BLEND);
-    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-
-    var U = {};
-    ['iResolution', 'iTime', 'uSpeed', 'uAmplitude', 'uWaveScale', 'uWaveRatio', 'uSwell', 'uTurbulence',
-     'uTilt', 'uZoom', 'uHeight', 'uFogDepth', 'uSteps', 'uBrightness', 'uOpacity', 'uGrain', 'uGrainIntensity',
-     'uMouse', 'uParallax', 'uEnableMouse', 'uHorizonColor', 'uWaveColor', 'uCrestColor'
-    ].forEach(function (n) { U[n] = gl.getUniformLocation(prog, n); });
-
-    function hexToRgb(hex) {
-      var m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-      return m ? [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255] : [1, 1, 1];
-    }
-    var horizon = hexToRgb('#0b0e14');  /* --obsidian, blends into the void */
-    var wave = hexToRgb('#3d5200');     /* dark olive body */
-    var crest = hexToRgb('#ccff00');    /* --iris, brand neon green */
-
-    gl.uniform1f(U.uSpeed, 0.25);
-    gl.uniform1f(U.uAmplitude, 1.8);
-    gl.uniform1f(U.uWaveScale, 0.5);
-    gl.uniform1f(U.uWaveRatio, 0.9);
-    gl.uniform1f(U.uSwell, 25.0);
-    gl.uniform1f(U.uTurbulence, 15.0);
-    gl.uniform1f(U.uTilt, 1.15);
-    gl.uniform1f(U.uZoom, 1.0);
-    gl.uniform1f(U.uHeight, 6.0);
-    gl.uniform1f(U.uFogDepth, 14.0);
-    gl.uniform1f(U.uSteps, 100.0);     /* needs this many to converge at this camera angle */
-    gl.uniform1f(U.uBrightness, 0.85);
-    gl.uniform1f(U.uOpacity, 0.5);
-    gl.uniform1f(U.uGrain, 1.0);
-    gl.uniform1f(U.uGrainIntensity, 0.03);
-    gl.uniform1f(U.uParallax, reduced ? 0.0 : 0.3);
-    gl.uniform1i(U.uEnableMouse, reduced ? 0 : 1);
-    gl.uniform3f(U.uHorizonColor, horizon[0], horizon[1], horizon[2]);
-    gl.uniform3f(U.uWaveColor, wave[0], wave[1], wave[2]);
-    gl.uniform3f(U.uCrestColor, crest[0], crest[1], crest[2]);
-
-    var dpr = Math.min(window.devicePixelRatio || 1, 2);
-
-    function resize() {
-      var w = window.innerWidth, h = window.innerHeight;
-      canvas.width = Math.round(w * dpr);
-      canvas.height = Math.round(h * dpr);
-      canvas.style.width = w + 'px';
-      canvas.style.height = h + 'px';
-      gl.viewport(0, 0, canvas.width, canvas.height);
-      gl.uniform2f(U.iResolution, canvas.width, canvas.height);
-    }
-    resize();
-    window.addEventListener('resize', resize);
-
-    var targetMouse = [0.5, 0.5];
-    var currentMouse = [0.5, 0.5];
-    if (!reduced) {
-      window.addEventListener('pointermove', function (e) {
-        targetMouse[0] = e.clientX / window.innerWidth;
-        targetMouse[1] = 1.0 - e.clientY / window.innerHeight;
-      }, { passive: true });
-    }
-
-    function draw(t) {
-      gl.uniform1f(U.iTime, t);
-      currentMouse[0] += 0.05 * (targetMouse[0] - currentMouse[0]);
-      currentMouse[1] += 0.05 * (targetMouse[1] - currentMouse[1]);
-      gl.uniform2f(U.uMouse, currentMouse[0], currentMouse[1]);
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.drawArrays(gl.TRIANGLES, 0, 3);
-    }
-
-    var start = performance.now();
-    var rafId = 0, running = false, isPageVisible = !document.hidden;
-
-    function frame(now) {
-      draw((now - start) * 0.001);
-      rafId = requestAnimationFrame(frame);
-    }
-    function go() { if (running || reduced || !isPageVisible) return; running = true; rafId = requestAnimationFrame(frame); }
-    function halt() { running = false; if (rafId) { cancelAnimationFrame(rafId); rafId = 0; } }
-
-    if (reduced) {
-      draw(9.0);
-    } else {
-      go();
-      document.addEventListener('visibilitychange', function () {
-        isPageVisible = !document.hidden;
-        isPageVisible ? go() : halt();
-      });
-    }
   })();
 </script>
 
