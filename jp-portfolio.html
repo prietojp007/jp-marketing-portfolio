@@ -3347,6 +3347,14 @@
       wake();
     });
 
+    /* Auto-pulse: fires a ring from the grid's center every 2s so a visitor
+       who hasn't moved their cursor over it yet still sees the grid is
+       interactive, not just decorative. */
+    setInterval(function () {
+      pulses.push({ x: w / 2, y: h / 2, t0: performance.now() });
+      wake();
+    }, 2000);
+
     var resizeTimer = 0;
     function scheduleRebuild() {
       clearTimeout(resizeTimer);
